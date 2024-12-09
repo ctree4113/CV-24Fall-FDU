@@ -35,10 +35,11 @@ class Solver(object):
         self.verti_translation = self.verti_translation.float()
 
     def create_exp_directory(self,exp_id):
-        if not os.path.exists('models/' + str(exp_id)):
-            os.makedirs('models/' + str(exp_id))
+        exp_path = os.path.join(self.args.save, str(exp_id))
+        if not os.path.exists(exp_path):
+            os.makedirs(exp_path)
 
-        csv = 'results_'+str(exp_id)+'.csv'
+        csv = f'results_{exp_id}.csv'
         with open(os.path.join(self.args.save, csv), 'w') as f:
             f.write('epoch, dice, Jac, clDice \n')
 
@@ -83,6 +84,8 @@ class Solver(object):
 
 
     def train(self, model, train_loader, val_loader,exp_id, num_epochs=10):
+
+        model = model.cuda()
 
         #### lr update schedule
         # gamma = 0.5
@@ -161,14 +164,16 @@ class Solver(object):
                 if best_p<dice_p:
                     best_p = dice_p
                     best_epo = epoch
-                    torch.save(model.state_dict(), 'models/' + str(exp_id) + '/best_model.pth')
+                    torch.save(model.state_dict(), 
+                              os.path.join(self.args.save, str(exp_id), 'best_model.pth'))
                 if (epoch+1) % self.args.save_per_epochs == 0:
-                    torch.save(model.state_dict(), 'models/' + str(exp_id) + '/'+str(epoch+1)+'_model.pth')
+                    torch.save(model.state_dict(), 
+                              os.path.join(self.args.save, str(exp_id), f'{epoch+1}_model.pth'))
                 print('[Epoch :%d] total loss:%.3f ' %(epoch,loss.item()))
 
                 # if epoch%self.args.save_per_epochs==0:
                 #     torch.save(model.state_dict(), 'models/' + str(exp_id) + '/epoch' + str(epoch + 1)+'.pth')
-            csv = 'results_'+str(exp_id)+'.csv'
+            csv = f'results_{exp_id}.csv'
             with open(os.path.join(self.args.save, csv), 'a') as f:
                 f.write('%03d,%0.6f \n' % (
                     best_epo,
@@ -239,7 +244,7 @@ class Solver(object):
             Jac_ls =np.array(self.Jac_ls)
             dice_ls = np.array(self.dice_ls)
             total_dice = np.mean(dice_ls)
-            csv = 'results_'+str(exp_id)+'.csv'
+            csv = f'results_{exp_id}.csv'
             with open(os.path.join(self.args.save, csv), 'a') as f:
                 f.write('%03d,%0.6f,%0.6f,%0.6f \n' % (
                     (epoch + 1),

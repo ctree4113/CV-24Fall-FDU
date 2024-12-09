@@ -1,0 +1,13 @@
+python train.py \
+--dataset 'isic' \
+--data_root '/data/ISIC2018_npy_all_224_320' \
+--resize 224 320 \
+--num-class 1 \
+--batch-size 4 \
+--epochs 100 \
+--lr 0.0001 \
+--decoder_attention \
+--use_mrde \  # 可选
+--use_glfi \   # 可选
+--save /data/ckpt/ISIC2018 \
+--folds 5 

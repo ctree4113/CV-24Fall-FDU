@@ -16,8 +16,9 @@ import torch.nn as nn
 import cv2
 from skimage.io import imread, imsave
 import os
-
-torch.cuda.set_device(2) ## GPU id
+from model.improved_models.improved_dconn import ImprovedDconnNet
+from losses.improved_loss import ImprovedLoss
+from losses.connect_loss import ConnectLoss
 
 def parse_args():
     parser = argparse.ArgumentParser(description='DconnNet Training With Pytorch')
@@ -34,6 +35,8 @@ def parse_args():
     # network option & hyper-parameters
     parser.add_argument('--num-class', type=int, default=4, metavar='N',
                         help='number of classes for your data')
+    parser.add_argument('--decoder_attention', action='store_true', default=False,
+                        help='use attention mechnism in LWDecoder')
     parser.add_argument('--batch-size', type=int, default=8, metavar='N',
                         help='input batch size for training (default: 8)')
     parser.add_argument('--epochs', type=int, default=45, metavar='N',
@@ -67,6 +70,17 @@ def parse_args():
     # evaluation only
     parser.add_argument('--test_only', action='store_true', default=False,
                         help='test only, please load the pretrained model')
+
+    # Add new arguments for improved model
+    parser.add_argument('--model_type', type=str, default='base',
+                      choices=['base', 'improved'])
+    parser.add_argument('--use_mrde', action='store_true', help='Use MRDE module')
+    parser.add_argument('--use_glfi', action='store_true', help='Use GLFI module')
+    parser.add_argument('--freq_weight', type=float, default=0.05,
+                      help='Weight for frequency regularization loss')
+    parser.add_argument('--topo_weight', type=float, default=0.05,
+                      help='Weight for topology consistency loss')
+
     args = parser.parse_args()
 
     if not os.path.isdir(args.save):
@@ -135,11 +149,31 @@ def main(args):
         print("Test batch number: %i" % len(val_loader))
 
         #### Above: define how you get the data on your own dataset ######
-        model = DconnNet(num_class=args.num_class).cuda()
+        if args.model_type == 'base':
+            model = DconnNet(
+                num_class=args.num_class,
+                decoder_attention=args.decoder_attention,
+                use_mrde=args.use_mrde,
+                use_glfi=args.use_glfi
+            )
+        else:
+            model = ImprovedDconnNet(num_class=args.num_class,
+                                    decoder_attention=args.decoder_attention,
+                                    use_mrde=args.use_mrde,
+                                    use_glfi=args.use_glfi)
 
         if args.pretrained:
             model.load_state_dict(torch.load(args.pretrained,map_location = torch.device('cpu')))
             model = model.cuda()
+
+        # Create loss function
+        base_criterion = ConnectLoss()
+        if args.model_type == 'improved':
+            criterion = ImprovedLoss(base_criterion,
+                                   freq_weight=args.freq_weight,
+                                   topo_weight=args.topo_weight)
+        else:
+            criterion = base_criterion
 
         solver = Solver(args)
 

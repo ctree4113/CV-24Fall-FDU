@@ -10,27 +10,57 @@ import torch
 from torchvision import models
 import torch.nn as nn
 from model.resnet import resnet34
-# from resnet import resnet34
-# import resnet
 from torch.nn import functional as F
 import torchsummary
 from torch.nn import init
 import model.gap as gap
+
+# 添加MRDE和GLFI的导入
+from model.mrde import MRDE
+from model.glfi import GLFI
+
 up_kwargs = {'mode': 'bilinear', 'align_corners': True}
 
 
 class DconnNet(nn.Module):
-    def __init__(self,num_class=1):
-        super(DconnNet,self).__init__()
+    def __init__(self, num_class=1, decoder_attention=False, use_mrde=False, use_glfi=False):
+        super(DconnNet, self).__init__()
         
         out_planes = num_class*8
-        self.backbone =resnet34(pretrained=True)
-        self.sde_module = SDE_module(512,512,out_planes)
-        self.fb5=FeatureBlock(512,256,relu=False,last=True) #256
-        self.fb4=FeatureBlock(256,128,relu=False) #128
-        self.fb3=FeatureBlock(128,64,relu=False) #64
-        self.fb2=FeatureBlock(64,64) 
-
+        self.backbone = resnet34(pretrained=True)
+        
+        # 可选的MRDE和GLFI
+        self.use_mrde = use_mrde
+        self.use_glfi = use_glfi
+        
+        # 原始SDE模块
+        self.sde_module = SDE_module(512, 512, out_planes)
+        
+        # 如果启用MRDE，创建MRDE模块
+        if use_mrde:
+            self.mrde_blocks = nn.ModuleList([
+                MRDE(64),    # c1
+                MRDE(64),    # c2
+                MRDE(128),   # c3
+                MRDE(256),   # c4
+                MRDE(512)    # c5
+            ])
+            
+        # 如果启用GLFI，创建GLFI模块
+        if use_glfi:
+            self.glfi_blocks = nn.ModuleList([
+                GLFI(256),  # d4
+                GLFI(128),  # d3
+                GLFI(64),   # d2
+                GLFI(64)    # d1
+            ])
+            
+        # 其他原有模块保持不变
+        self.fb5 = FeatureBlock(512,256,relu=False,last=True)
+        self.fb4 = FeatureBlock(256,128,relu=False)
+        self.fb3 = FeatureBlock(128,64,relu=False)
+        self.fb2 = FeatureBlock(64,64)
+        
         self.gap = gap.GlobalAvgPool2D()
 
         self.sb1 = SpaceBlock(512,512,512)
@@ -42,9 +72,10 @@ class DconnNet(nn.Module):
 
         self.relu = nn.ReLU()
         
-        self.final_decoder=LWdecoder(in_channels=[64,64,128,256],out_channels=32,in_feat_output_strides=(4, 8, 16, 32),out_feat_output_stride=4,norm_fn=nn.BatchNorm2d,num_groups_gn=None)
+        self.final_decoder=LWdecoder(in_channels=[64,64,128,256],
+                                     out_channels=32,in_feat_output_strides=(4, 8, 16, 32),out_feat_output_stride=4,
+                                     norm_fn=nn.BatchNorm2d,num_groups_gn=None)
         
-        self.cls_pred_conv = nn.Conv2d(64, 32, 3,1,1)
         self.cls_pred_conv_2 = nn.Conv2d(32, out_planes, 1)
         self.upsample4x_op = nn.UpsamplingBilinear2d(scale_factor=2)
         self.channel_mapping = nn.Sequential(
@@ -59,52 +90,85 @@ class DconnNet(nn.Module):
                     # nn.ReLU(True)
                 )
 
+        self.decoder_attention = decoder_attention
+        if decoder_attention:
+            self.attention_producer = nn.Sequential(
+                nn.Conv2d(64 + 64 + 128 + 256, 1024, 1), nn.ReLU(),
+                nn.Conv2d(1024, 512, 3, 1, 1), nn.ReLU(),
+                nn.Conv2d(512, 32 * 4, 1)
+            )
 
     def forward(self, x):
-        
-        
-        
-        x = self.backbone.conv1(x)
-        x = self.backbone.bn1(x)
-        c1 = self.backbone.relu(x)#1/2  64
+        # Encoder path
+        c1 = self.backbone.conv1(x)
+        c1 = self.backbone.bn1(c1)
+        c1 = self.backbone.relu(c1)
         
         x = self.backbone.maxpool(c1)
-        c2 = self.backbone.layer1(x)#1/4   64
-        c3 = self.backbone.layer2(c2)#1/8   128
-        c4 = self.backbone.layer3(c3)#1/16   256
-        c5 = self.backbone.layer4(c4)#1/32   512
-
-        #### directional Prior ####
+        c2 = self.backbone.layer1(x)
+        c3 = self.backbone.layer2(c2)
+        c4 = self.backbone.layer3(c3)
+        c5 = self.backbone.layer4(c4)
+        
+        # 如果启用MRDE，应用到c1-c4
+        if self.use_mrde:
+            features = [c1, c2, c3, c4]
+            for i in range(len(features)):
+                features[i] = self.mrde_blocks[i](features[i])
+            c1, c2, c3, c4 = features
+        
+        # Original directional path
         directional_c5 = self.channel_mapping(c5)
-        mapped_c5=F.interpolate(directional_c5,scale_factor=32,mode='bilinear',align_corners=True)
+        mapped_c5 = F.interpolate(directional_c5, scale_factor=32, mode='bilinear', align_corners=True)
         mapped_c5 = self.direc_reencode(mapped_c5)
         
         d_prior = self.gap(mapped_c5)
-
-        c5 = self.sde_module(c5,d_prior)
-
-
+        
+        # 对c5使用MRDE或SDE
+        if self.use_mrde:
+            c5 = self.mrde_blocks[4](c5)
+        else:
+            c5 = self.sde_module(c5, d_prior)
+            
         c6 = self.gap(c5)
         
+        # Space blocks with skip connections
+        r5 = self.sb1(c6, c5)
+        
+        # Decoder path with optional GLFI
+        d4 = self.relu(self.fb5(r5) + c4)
+        if self.use_glfi:
+            d4 = d4 + self.glfi_blocks[0](d4) * 0.1
+        r4 = self.sb2(self.gap(r5), d4)
+        
+        d3 = self.relu(self.fb4(r4) + c3)
+        if self.use_glfi:
+            d3 = d3 + self.glfi_blocks[1](d3) * 0.1
+        r3 = self.sb3(self.gap(r4), d3)
+        
+        d2 = self.relu(self.fb3(r3) + c2)
+        if self.use_glfi:
+            d2 = d2 + self.glfi_blocks[2](d2) * 0.1
+        r2 = self.sb4(self.gap(r3), d2)
+        
+        d1 = self.fb2(r2) + c1
+        if self.use_glfi:
+            d1 = d1 + self.glfi_blocks[3](d1) * 0.1
+            
+        feat_list = [d1,d2,d3,d4]
 
-        r5 = self.sb1(c6,c5)
-
-        d4=self.relu(self.fb5(r5)+c4)  #256
-        r4 = self.sb2(self.gap(r5),d4) 
-
-        d3=self.relu(self.fb4(r4)+c3)  #128
-        r3 = self.sb3(self.gap(r4),d3) 
-
-        d2=self.relu(self.fb3(r3)+c2) #64
-        r2 = self.sb4(self.gap(r3),d2) 
-
-        d1=self.fb2(r2)+c1 #32
-        # d1 = self.sr5(c6,d1) 
-
-        feat_list = [d1,d2,d3,d4,c5]
-
-
-        final_feat = self.final_decoder(feat_list)
+        attns = None
+        if self.decoder_attention:
+            attns = [c1, 
+                     nn.UpsamplingBilinear2d(scale_factor=2)(c2), 
+                     nn.UpsamplingBilinear2d(scale_factor=4)(c3),
+                     nn.UpsamplingBilinear2d(scale_factor=8)(c4),
+                    ]
+            attns = self.attention_producer(torch.cat(attns, dim=1))
+            n, c, h, w = attns.shape
+            attns = torch.split(attns.reshape(n, c // 4, 4, h, w), split_size_or_sections=1, dim=1)
+            attns = torch.concat([F.softmax(attn, dim=2) for attn in attns], dim=1)
+        final_feat = self.final_decoder(feat_list, attns=attns)
 
         cls_pred = self.cls_pred_conv_2(final_feat)
         cls_pred = self.upsample4x_op(cls_pred)
@@ -231,14 +295,9 @@ class DANetHead(nn.Module):
 
 
 class SpaceBlock(nn.Module):
-    def __init__(self,
-                 in_channels,
-                 channel_in,
-                 out_channels,
-                 scale_aware_proj=False):
+    def __init__(self, in_channels, channel_in, out_channels, scale_aware_proj=False):
         super(SpaceBlock, self).__init__()
         self.scale_aware_proj = scale_aware_proj
-
 
         self.scene_encoder = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, 1),
@@ -246,31 +305,26 @@ class SpaceBlock(nn.Module):
             nn.Conv2d(out_channels, out_channels, 1),
         )
 
-        self.content_encoders=nn.Sequential(
-                nn.Conv2d(channel_in, out_channels, 1),
-                nn.BatchNorm2d(out_channels),
-                nn.ReLU(True)
-            )
+        self.content_encoders = nn.Sequential(
+            nn.Conv2d(channel_in, out_channels, 1),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(True)
+        )
         
-        self.feature_reencoders=nn.Sequential(
-                nn.Conv2d(channel_in, out_channels, 1),
-                nn.BatchNorm2d(out_channels),
-                nn.ReLU(True)
-            )
-        
+        self.feature_reencoders = nn.Sequential(
+            nn.Conv2d(channel_in, out_channels, 1),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(True)
+        )
 
         self.normalizer = nn.Sigmoid()
-
+    
     def forward(self, scene_feature, features):
         content_feats = self.content_encoders(features)
-
         scene_feat = self.scene_encoder(scene_feature)
         relations = self.normalizer((scene_feat * content_feats).sum(dim=1, keepdim=True))
-
         p_feats = self.feature_reencoders(features) 
-
         refined_feats = relations * p_feats 
-
         return refined_feats
 
 
@@ -312,13 +366,19 @@ class LWdecoder(nn.Module):
                 for idx in range(num_layers)]))
             dec_level+=1
 
-    def forward(self, feat_list: list):
+    def forward(self, feat_list: list, attns=None):
         inner_feat_list = []
         for idx, block in enumerate(self.blocks):
             decoder_feat = block(feat_list[idx])
             inner_feat_list.append(decoder_feat)
 
-        out_feat = sum(inner_feat_list) / 4.
+        if attns is None:
+            out_feat = sum(inner_feat_list) / len(inner_feat_list)
+        else:
+            out_feat = attns * torch.stack(inner_feat_list, dim=2)
+            out_feat = torch.split(out_feat, split_size_or_sections=1, dim=1)
+            out_feat = [torch.sum(channel, dim=2) for channel in out_feat]
+            out_feat = torch.concat(out_feat, dim=1)
         return out_feat
 
 class FeatureBlock(nn.Module):
