@@ -15,7 +15,6 @@ import torchsummary
 from torch.nn import init
 import model.gap as gap
 
-# 添加MRDE和GLFI的导入
 from model.mrde import MRDE
 from model.glfi import GLFI
 
@@ -29,14 +28,11 @@ class DconnNet(nn.Module):
         out_planes = num_class*8
         self.backbone = resnet34(pretrained=True)
         
-        # 可选的MRDE和GLFI
         self.use_mrde = use_mrde
         self.use_glfi = use_glfi
         
-        # 原始SDE模块
         self.sde_module = SDE_module(512, 512, out_planes)
         
-        # 如果启用MRDE，创建MRDE模块
         if use_mrde:
             self.mrde_blocks = nn.ModuleList([
                 MRDE(64),    # c1
@@ -46,7 +42,6 @@ class DconnNet(nn.Module):
                 MRDE(512)    # c5
             ])
             
-        # 如果启用GLFI，创建GLFI模块
         if use_glfi:
             self.glfi_blocks = nn.ModuleList([
                 GLFI(256),  # d4
@@ -55,7 +50,6 @@ class DconnNet(nn.Module):
                 GLFI(64)    # d1
             ])
             
-        # 其他原有模块保持不变
         self.fb5 = FeatureBlock(512,256,relu=False,last=True)
         self.fb4 = FeatureBlock(256,128,relu=False)
         self.fb3 = FeatureBlock(128,64,relu=False)
@@ -110,7 +104,6 @@ class DconnNet(nn.Module):
         c4 = self.backbone.layer3(c3)
         c5 = self.backbone.layer4(c4)
         
-        # 如果启用MRDE，应用到c1-c4
         if self.use_mrde:
             features = [c1, c2, c3, c4]
             for i in range(len(features)):
@@ -124,7 +117,6 @@ class DconnNet(nn.Module):
         
         d_prior = self.gap(mapped_c5)
         
-        # 对c5使用MRDE或SDE
         if self.use_mrde:
             c5 = self.mrde_blocks[4](c5)
         else:

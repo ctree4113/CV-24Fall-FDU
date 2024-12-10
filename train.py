@@ -16,7 +16,6 @@ import torch.nn as nn
 import cv2
 from skimage.io import imread, imsave
 import os
-from model.improved_models.improved_dconn import ImprovedDconnNet
 from losses.improved_loss import ImprovedLoss
 from losses.connect_loss import ConnectLoss
 
@@ -72,14 +71,12 @@ def parse_args():
                         help='test only, please load the pretrained model')
 
     # Add new arguments for improved model
-    parser.add_argument('--model_type', type=str, default='base',
-                      choices=['base', 'improved'])
     parser.add_argument('--use_mrde', action='store_true', help='Use MRDE module')
     parser.add_argument('--use_glfi', action='store_true', help='Use GLFI module')
-    parser.add_argument('--freq_weight', type=float, default=0.05,
-                      help='Weight for frequency regularization loss')
-    parser.add_argument('--topo_weight', type=float, default=0.05,
-                      help='Weight for topology consistency loss')
+    parser.add_argument('--freq_weight', type=float, default=0.0,
+                       help='Weight for frequency loss (default: 0.0)')
+    parser.add_argument('--topo_weight', type=float, default=0.0,
+                       help='Weight for topology loss (default: 0.0)')
 
     args = parser.parse_args()
 
@@ -149,18 +146,12 @@ def main(args):
         print("Test batch number: %i" % len(val_loader))
 
         #### Above: define how you get the data on your own dataset ######
-        if args.model_type == 'base':
-            model = DconnNet(
-                num_class=args.num_class,
-                decoder_attention=args.decoder_attention,
-                use_mrde=args.use_mrde,
-                use_glfi=args.use_glfi
-            )
-        else:
-            model = ImprovedDconnNet(num_class=args.num_class,
-                                    decoder_attention=args.decoder_attention,
-                                    use_mrde=args.use_mrde,
-                                    use_glfi=args.use_glfi)
+        model = DconnNet(
+            num_class=args.num_class,
+            decoder_attention=args.decoder_attention,
+            use_mrde=args.use_mrde,
+            use_glfi=args.use_glfi
+        )
 
         if args.pretrained:
             model.load_state_dict(torch.load(args.pretrained,map_location = torch.device('cpu')))
@@ -168,7 +159,7 @@ def main(args):
 
         # Create loss function
         base_criterion = ConnectLoss()
-        if args.model_type == 'improved':
+        if args.freq_weight > 0 or args.topo_weight > 0:
             criterion = ImprovedLoss(base_criterion,
                                    freq_weight=args.freq_weight,
                                    topo_weight=args.topo_weight)
