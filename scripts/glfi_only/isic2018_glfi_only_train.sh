@@ -10,7 +10,6 @@ python train.py \
 --epochs 100 \
 --lr 0.0001 \
 --lr-update 'CosineAnnealingWarmRestarts' \
---model_type 'improved' \
 --use_glfi \
 --save /data/agent/Jetbrains/test/CV-24Fall-FDU/ckpt/glfi_only/ISIC2018 \
 --folds 5

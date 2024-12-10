@@ -10,8 +10,7 @@ python train.py \
 --epochs 150 \
 --lr 0.002 \
 --lr-update 'poly' \
---model_type 'base' \
---decoder_attention \
---save /data/agent/Jetbrains/test/CV-24Fall-FDU/ckpt/decoder_attention_only/CHASEDB1 \
+--use_mrde \
+--save /data/agent/Jetbrains/test/CV-24Fall-FDU/ckpt/mrde_only/CHASEDB1 \
 --folds 5
 

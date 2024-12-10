@@ -11,10 +11,6 @@ python train.py \
 --lr 0.002 \
 --lr-update 'poly' \
 --decoder_attention \
---use_mrde \
---use_glfi \
---freq_weight 0.05 \
---topo_weight 0.05 \
---save /data/agent/Jetbrains/test/CV-24Fall-FDU/ckpt/improved/CHASEDB1 \
+--save /data/agent/Jetbrains/test/CV-24Fall-FDU/ckpt/decoder_attention_only/CHASEDB1 \
 --folds 5
 

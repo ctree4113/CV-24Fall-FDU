@@ -10,10 +10,7 @@ python train.py \
 --epochs 150 \
 --lr 0.002 \
 --lr-update 'poly' \
---model_type 'improved' \
 --use_glfi \
---freq_weight 0.05 \
---topo_weight 0.05 \
 --save /data/agent/Jetbrains/test/CV-24Fall-FDU/ckpt/glfi_only/CHASEDB1 \
 --folds 5
 

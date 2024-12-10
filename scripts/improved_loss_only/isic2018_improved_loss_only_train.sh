@@ -10,11 +10,8 @@ python train.py \
 --epochs 100 \
 --lr 0.0001 \
 --lr-update 'CosineAnnealingWarmRestarts' \
---decoder_attention \
---use_mrde \
---use_glfi \
 --freq_weight 0.05 \
 --topo_weight 0.05 \
---save /data/agent/Jetbrains/test/CV-24Fall-FDU/ckpt/improved/ISIC2018 \
+--save /data/agent/Jetbrains/test/CV-24Fall-FDU/ckpt/improved_loss_only/ISIC2018 \
 --folds 5
 
