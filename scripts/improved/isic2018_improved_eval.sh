@@ -8,6 +8,8 @@ python eval.py \
 --metrics DSC:IOU:ACC:PREC \
 --num-class 1 \
 --decoder_attention \
+--use_glfi \
+--use_mrde \
 --ckpt_path /data/agent/Jetbrains/test/CV-24Fall-FDU/ckpt/improved/ISIC2018 \
 --output_path /data/agent/Jetbrains/test/CV-24Fall-FDU/eval_results/improved/ISIC2018 \
 --num_pred 5

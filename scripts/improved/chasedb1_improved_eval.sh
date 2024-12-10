@@ -8,6 +8,8 @@ python eval.py \
 --metrics clDice:DSC:IOU:1-Betti \
 --num-class 1 \
 --decoder_attention \
+--use_glfi \
+--use_mrde \
 --ckpt_path /data/agent/Jetbrains/test/CV-24Fall-FDU/ckpt/improved/CHASEDB1 \
 --output_path /data/agent/Jetbrains/test/CV-24Fall-FDU/eval_results/improved/CHASEDB1 \
 --num_pred 5
