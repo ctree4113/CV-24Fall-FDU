@@ -2,99 +2,77 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-class DirectionalPyramidPooling(nn.Module):
-    """Directional Pyramid Pooling module for multi-scale directional feature extraction"""
-    def __init__(self, in_channels, reduction_ratio=4):
+class DirectionalConvBlock(nn.Module):
+    """Directional Convolution Block with gradient stability"""
+    def __init__(self, channels):
         super().__init__()
-        self.levels = [1, 2, 4]  # Pyramid levels
-        reduced_channels = in_channels // reduction_ratio
         
-        # 添加输入归一化
-        self.input_norm = nn.GroupNorm(8, in_channels)
-        
-        # 修改卷积层，添加更严格的归一化
-        self.dir_convs = nn.ModuleList([
-            nn.Sequential(
-                # 使用GroupNorm替代BatchNorm，更稳定
-                nn.Conv2d(in_channels, reduced_channels, 1, bias=False),
-                nn.GroupNorm(4, reduced_channels),
-                nn.ReLU(inplace=False),
-                # 使用深度可分离卷积减少参数量
-                nn.Conv2d(reduced_channels, reduced_channels, 3, 
-                         padding=1, groups=reduced_channels, bias=False),
-                nn.GroupNorm(4, reduced_channels),
-                nn.ReLU(inplace=False),
-                # 点卷积
-                nn.Conv2d(reduced_channels, reduced_channels*4, 1, bias=False),  # 减少通道数
-                nn.GroupNorm(4, reduced_channels*4),
-                nn.ReLU(inplace=False)
-            ) for _ in self.levels
-        ])
-        
-        # 添加特征缩放因子
-        self.scale_factors = nn.Parameter(torch.ones(len(self.levels)) * 0.1)
-        
-        # 修改fusion层
-        self.fusion = nn.Sequential(
-            nn.Conv2d(in_channels + reduced_channels*4*len(self.levels), 
-                     in_channels, 1, bias=False),
-            nn.GroupNorm(8, in_channels),
+        # Depthwise separable convolution for directional feature extraction
+        self.dir_conv = nn.Sequential(
+            # Depthwise conv
+            nn.Conv2d(channels, channels, 3, padding=1, groups=channels, bias=False),
+            nn.GroupNorm(8, channels),
             nn.ReLU(inplace=False),
-            nn.Dropout2d(0.1)  # 添加dropout
+            # Pointwise conv
+            nn.Conv2d(channels, channels, 1, bias=False),
+            nn.GroupNorm(8, channels)
         )
         
+        # Learnable scale factor
+        self.scale = nn.Parameter(torch.zeros(1))
+        
+        self._init_weights()
+    
+    def _init_weights(self):
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                m.weight.data *= 0.1
+            elif isinstance(m, nn.GroupNorm):
+                nn.init.constant_(m.weight, 0.1)
+                nn.init.constant_(m.bias, 0)
+    
     def forward(self, x):
-        """
-        Args:
-            x: Input feature map (B, C, H, W)
-        Returns:
-            out: Enhanced feature map with multi-scale directional information
-        """
-        # 输入归一化
-        x = self.input_norm(x)
-        h, w = x.shape[2:]
-        outputs = [x]  # Keep the input feature
+        # Input normalization
+        x = x / (torch.norm(x, p=2, dim=1, keepdim=True) + 1e-6)
         
-        # Process each pyramid level
-        for i, level in enumerate(self.levels):
-            # 确保池化后的尺寸至少为1
-            kernel_h = max(1, h//level)
-            kernel_w = max(1, w//level)
-            feat = F.adaptive_avg_pool2d(x, (kernel_h, kernel_w))
-            
-            # Apply directional convolutions
-            feat = self.dir_convs[i](feat)
-            
-            # Upsample back to original size
-            feat = F.interpolate(feat, (h,w), 
-                               mode='bilinear', align_corners=False)
-            
-            # 应用可学习的缩放因子
-            feat = feat * self.scale_factors[i]
-            
-            # 添加L2正则化
-            feat = feat / (torch.norm(feat, p=2, dim=1, keepdim=True) + 1e-6)
-            
-            outputs.append(feat)
-            
-        # Concatenate all features
-        out = torch.cat(outputs, dim=1)
+        # Directional feature extraction
+        feat = self.dir_conv(x)
         
-        # Final fusion
-        out = self.fusion(out)
+        # Scale and residual connection
+        scale = torch.sigmoid(self.scale) * 0.1
+        out = x + feat * scale
         
-        # 残差连接前的特征归一化
+        # Output normalization
         out = out / (torch.norm(out, p=2, dim=1, keepdim=True) + 1e-6)
+        
         return out
 
 class MRDE(nn.Module):
-    """Multi-Resolution Directional Enhancement Module"""
+    """Multi-Resolution Directional Enhancement Module with gradient stability"""
     def __init__(self, channels, reduction_ratio=4):
         super().__init__()
         
-        self.dpp = DirectionalPyramidPooling(channels, reduction_ratio)
+        # Multi-scale directional feature extraction
+        self.scales = [1, 2, 4]  # Remove scale 8 to prevent too small feature maps
+        reduced_channels = channels // reduction_ratio
         
-        # 修改channel attention
+        # Multi-scale branches
+        self.branches = nn.ModuleList([
+            nn.Sequential(
+                # Channel reduction
+                nn.Conv2d(channels, reduced_channels, 1, bias=False),
+                nn.GroupNorm(4, reduced_channels),
+                nn.ReLU(inplace=False),
+                # Directional feature extraction
+                DirectionalConvBlock(reduced_channels),
+                # Channel expansion
+                nn.Conv2d(reduced_channels, channels, 1, bias=False),
+                nn.GroupNorm(8, channels)
+            ) for _ in self.scales
+        ])
+        
+        # Channel attention
         self.channel_att = nn.Sequential(
             nn.AdaptiveAvgPool2d(1),
             nn.Conv2d(channels, channels//reduction_ratio, 1, bias=False),
@@ -104,7 +82,7 @@ class MRDE(nn.Module):
             nn.Sigmoid()
         )
         
-        # 修改spatial attention
+        # Spatial attention
         self.spatial_att = nn.Sequential(
             nn.Conv2d(channels, channels//2, 1, bias=False),
             nn.GroupNorm(4, channels//2),
@@ -113,40 +91,69 @@ class MRDE(nn.Module):
             nn.Sigmoid()
         )
         
-        # 添加输出缩放因子
-        self.output_scale = nn.Parameter(torch.ones(1) * 0.1)
+        # Feature fusion
+        self.fusion = nn.Sequential(
+            nn.Conv2d(channels * len(self.scales), channels, 1, bias=False),
+            nn.GroupNorm(8, channels),
+            nn.ReLU(inplace=False)
+        )
         
-        # 初始化
+        # Learnable scale factor
+        self.scale = nn.Parameter(torch.zeros(1))
+        
         self._init_weights()
-        
+    
     def _init_weights(self):
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
-                # 使用更保守的初始化
                 nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
-                if m.bias is not None:
-                    nn.init.zeros_(m.bias)
-            elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
-                nn.init.ones_(m.weight)
-                nn.init.zeros_(m.bias)
+                m.weight.data *= 0.1
+            elif isinstance(m, nn.GroupNorm):
+                nn.init.constant_(m.weight, 0.1)
+                nn.init.constant_(m.bias, 0)
     
     def forward(self, x):
-        # 输入特征归一化
+        # Input normalization
         x = x / (torch.norm(x, p=2, dim=1, keepdim=True) + 1e-6)
         
-        # 方向性特征增强
-        feat = self.dpp(x)
+        # Multi-scale feature extraction
+        feats = []
+        for i, branch in enumerate(self.branches):
+            # Adaptive pooling for different scales
+            scale = self.scales[i]
+            if scale > 1:
+                h, w = x.shape[2:]
+                h_s, w_s = h // scale, w // scale
+                # Ensure minimum size
+                h_s, w_s = max(1, h_s), max(1, w_s)
+                x_scaled = F.adaptive_avg_pool2d(x, (h_s, w_s))
+            else:
+                x_scaled = x
+            
+            # Process features
+            feat = branch(x_scaled)
+            
+            # Upsample if needed
+            if scale > 1:
+                feat = F.interpolate(feat, size=x.shape[2:], 
+                                   mode='bilinear', align_corners=False)
+            
+            feats.append(feat)
         
-        # 应用attention
-        channel_att = self.channel_att(feat)
-        spatial_att = self.spatial_att(feat)
+        # Feature fusion
+        feat = torch.cat(feats, dim=1)
+        feat = self.fusion(feat)
         
-        # 特征融合
-        feat = feat * channel_att * spatial_att
+        # Apply attention
+        channel_weight = self.channel_att(feat)
+        spatial_weight = self.spatial_att(feat)
+        feat = feat * channel_weight * spatial_weight
         
-        # 残差连接
-        out = x + feat * self.output_scale
+        # Scale and residual connection
+        scale = torch.sigmoid(self.scale) * 0.1
+        out = x + feat * scale
         
-        # 输出归一化
+        # Output normalization
         out = out / (torch.norm(out, p=2, dim=1, keepdim=True) + 1e-6)
+        
         return out
