@@ -14,6 +14,9 @@ from connect_loss import Bilateral_voting
 from metrics.cldice import clDice
 from metrics.cal_betti import getBetti
 from skimage import measure
+import matplotlib.pyplot as plt
+from matplotlib.gridspec import GridSpec
+import pandas as pd
 
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -179,6 +182,81 @@ def evaluate_topology(pred, target):
     
     return {'topo_diff': topo_diff}
 
+def generate_summary_plot(args, metrics_df):
+    """Generate a summary plot with all metrics and visualizations"""
+    plt.figure(figsize=(24, 20))
+    gs = GridSpec(3, 2, height_ratios=[1, 1, 3], hspace=0.4, wspace=0.3)
+    
+    # Create metrics table
+    ax0 = plt.subplot(gs[0, 0])
+    ax0.axis('tight')
+    ax0.axis('off')
+    
+    # Remove index column and prepare data for table
+    table_data = metrics_df.copy()
+    table_data.set_index('fold', inplace=True)  # Use 'fold' column as index
+    
+    table = ax0.table(cellText=table_data.values,
+                     colLabels=table_data.columns,
+                     rowLabels=table_data.index,  # Row labels will be fold numbers
+                     cellLoc='center',
+                     loc='center')
+    
+    table.auto_set_font_size(False)
+    table.set_fontsize(10)
+    table.scale(1.2, 1.8)
+    ax0.set_title('Evaluation Metrics', pad=20, fontsize=14)
+    
+    # Create grouped bar plot
+    ax1 = plt.subplot(gs[0, 1])
+    metrics = metrics_df.columns[1:]  # Skip 'fold' column
+    x = np.arange(len(metrics_df))
+    width = 0.8 / len(metrics)  # Adjust bar width
+    
+    for i, metric in enumerate(metrics):
+        ax1.bar(x + i * width, metrics_df[metric], 
+                width, label=metric, alpha=0.8)
+    
+    ax1.set_xticks(x + width * (len(metrics) - 1) / 2)
+    ax1.set_xticklabels(metrics_df.index, fontsize=10)
+    ax1.legend(fontsize=10, loc='upper right')
+    ax1.set_title('Metrics by Fold', pad=20, fontsize=14)
+    ax1.grid(True, alpha=0.3, axis='y')
+    
+    # Create visualization grid for results
+    num_folds = len(metrics_df) - 1  # Exclude average row
+    gs_vis = GridSpec(num_folds, 3, top=0.65, bottom=0.05, 
+                     left=0.1, right=0.9, 
+                     hspace=0.3, wspace=0.1)
+    
+    for fold in range(num_folds):
+        # Load original image, prediction and ground truth
+        orig = plt.imread(os.path.join(args.output_path, f'{fold+1}', 'original_1.png'))
+        pred = plt.imread(os.path.join(args.output_path, f'{fold+1}', 'example_1.png'))
+        gt = plt.imread(os.path.join(args.output_path, f'{fold+1}', 'ground_truth_1.png'))
+        
+        # Create subplots using GridSpec
+        ax_orig = plt.subplot(gs_vis[fold, 0])
+        ax_orig.imshow(orig)
+        ax_orig.set_title(f'Fold {fold+1} Original', fontsize=12)
+        ax_orig.axis('off')
+        
+        ax_pred = plt.subplot(gs_vis[fold, 1])
+        ax_pred.imshow(pred)
+        ax_pred.set_title(f'Fold {fold+1} Prediction', fontsize=12)
+        ax_pred.axis('off')
+        
+        ax_gt = plt.subplot(gs_vis[fold, 2])
+        ax_gt.imshow(gt)
+        ax_gt.set_title(f'Fold {fold+1} Ground Truth', fontsize=12)
+        ax_gt.axis('off')
+    
+    plt.suptitle(f'Evaluation Summary', fontsize=16, y=0.95)
+    
+    plt.savefig(os.path.join(args.output_path, 'summary.png'), 
+                dpi=300, bbox_inches='tight', pad_inches=0.2)
+    plt.close()
+
 def main(args):
     metrics = {
         'DSC': [],
@@ -194,7 +272,7 @@ def main(args):
     with open(os.path.join(args.output_path, 'result.csv'), 'w') as f:
         f.write(','.join(['fold'] + list(metrics.keys())) + '\n')
 
-    num_folds = len(os.listdir(args.ckpt_path))
+    num_folds = args.num_pred if args.num_pred > 0 else len(os.listdir(args.ckpt_path))
     for fold in range(num_folds):
         if args.dataset == 'isic':
             validset = ISIC2018_dataset(dataset_folder=args.data_root, folder=fold+1, train_type='test',
@@ -269,9 +347,16 @@ def main(args):
                 pred = predict(model, img, hori, verti, num_class=1)
                 
                 rank_idx = np.where(topk == idx)[0].item()
+                
+                # Save original image
+                orig_pic = to_pil(img.squeeze(0))
+                orig_pic.save(os.path.join(args.output_path, f'{fold + 1}', f'original_{rank_idx + 1}.png'))
+                
+                # Save prediction result
                 pred_pic = to_pil(pred.squeeze(0))
                 pred_pic.save(os.path.join(args.output_path, f'{fold + 1}', f'example_{rank_idx + 1}.png'))
 
+                # Save ground truth
                 gt_pic = to_pil(gt.to(pred.dtype).squeeze(0))
                 gt_pic.save(os.path.join(args.output_path, f'{fold + 1}', f'ground_truth_{rank_idx + 1}.png'))
         
@@ -279,6 +364,9 @@ def main(args):
     with open(os.path.join(args.output_path, 'result.csv'), 'a') as f:
         avg_datas = ['%.6f' % (sum_metric / num_folds) for _, sum_metric in avg.items()]
         f.write(','.join([f'average'] + avg_datas) + '\n')
+    
+    metrics_df = pd.read_csv(os.path.join(args.output_path, 'result.csv'))
+    generate_summary_plot(args, metrics_df)
 
 
 if __name__ == '__main__':
