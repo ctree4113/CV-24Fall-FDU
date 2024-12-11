@@ -6,7 +6,7 @@ python train.py \
 --data_root '/data/agent/Jetbrains/test/CV-24Fall-FDU/data/ISIC2018_npy_all_224_320' \
 --resize 224 320 \
 --num-class 1 \
---batch-size 10 \
+--batch-size 2 \
 --epochs 100 \
 --lr 0.0001 \
 --lr-update 'CosineAnnealingWarmRestarts' \

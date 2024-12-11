@@ -10,7 +10,7 @@ python eval.py \
 --decoder_attention \
 --use_glfi \
 --use_mrde \
---ckpt_path /data/agent/Jetbrains/test/CV-24Fall-FDU/ckpt/improved/CHASEDB1 \
+--ckpt_path /data/agent/Jetbrains/test/CV-24Fall-FDU/ckpt/fully_improved/CHASEDB1 \
 --output_path /data/agent/Jetbrains/test/CV-24Fall-FDU/eval_results/improved/CHASEDB1 \
 --num_pred 5
 
