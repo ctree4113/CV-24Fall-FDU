@@ -12,60 +12,94 @@ class ImprovedLoss(nn.Module):
         self.topo_weight = topo_weight
         
     def forward(self, pred, target):
+        # 首先计算基础损失
         base_loss = self.base_criterion(pred, target)
         
-        # Frequency loss
-        freq_loss = self.frequency_loss(pred, target)
+        # 对于频域损失和拓扑损失，我们需要先处理预测输出
+        if len(pred.shape) == 4 and pred.shape[1] == 8:  # (B, 8, H, W)
+            # 对于方向连接预测，我们取平均值作为最终预测
+            pred_processed = torch.sigmoid(pred).mean(dim=1, keepdim=True)  # (B, 1, H, W)
+        else:
+            pred_processed = torch.sigmoid(pred)
         
-        # Topology consistency loss
-        topo_loss = self.topology_loss(pred, target)
+        # 确保 target 的维度正确
+        if len(target.shape) == 3:
+            target = target.unsqueeze(1)  # (B, 1, H, W)
+            
+        # 计算频域损失
+        freq_loss = self.frequency_loss(pred_processed, target)
         
-        # Combined loss
+        # 计算拓扑损失
+        topo_loss = self.topology_loss(pred_processed, target)
+        
+        # 组合损失
         total_loss = base_loss + self.freq_weight * freq_loss + self.topo_weight * topo_loss
         
         return total_loss
     
     def frequency_loss(self, pred, target):
         """Calculate frequency domain loss"""
-        # Convert to frequency domain
-        pred_fft = torch.fft.fft2(pred)
-        target_fft = torch.fft.fft2(target)
+        # 确保输入在合理范围内
+        pred = torch.clamp(pred, min=1e-7, max=1-1e-7)
+        target = torch.clamp(target, min=1e-7, max=1-1e-7)
         
-        # Calculate magnitude spectrum
-        pred_magnitude = torch.abs(pred_fft)
-        target_magnitude = torch.abs(target_fft)
+        # 转换到频域
+        pred_fft = torch.fft.fft2(pred.float())
+        target_fft = torch.fft.fft2(target.float())
         
-        # Calculate L1 loss in frequency domain
-        freq_loss = F.l1_loss(pred_magnitude, target_magnitude)
+        # 计算幅度谱
+        pred_magnitude = torch.abs(pred_fft) + 1e-7  # 添加小值避免取对数时出现问题
+        target_magnitude = torch.abs(target_fft) + 1e-7
+        
+        # 计算对数幅度谱的差异
+        freq_loss = F.l1_loss(
+            torch.log(pred_magnitude), 
+            torch.log(target_magnitude)
+        )
         
         return freq_loss
     
     def topology_loss(self, pred, target):
         """Calculate topology consistency loss"""
-        # Use Sobel operator to calculate gradients
-        pred_grad_x = self.sobel_gradient_x(pred)
-        pred_grad_y = self.sobel_gradient_y(pred)
-        target_grad_x = self.sobel_gradient_x(target)
-        target_grad_y = self.sobel_gradient_y(target)
+        # 确保输入在合理范围内
+        pred = torch.clamp(pred, min=1e-7, max=1-1e-7)
+        target = torch.clamp(target, min=1e-7, max=1-1e-7)
         
-        # Calculate gradient direction
-        pred_direction = torch.atan2(pred_grad_y, pred_grad_x)
-        target_direction = torch.atan2(target_grad_y, target_grad_x)
+        # 计算每个通道的梯度
+        batch_size = pred.shape[0]
+        total_loss = 0
         
-        # Calculate direction difference
-        direction_diff = 1 - torch.cos(pred_direction - target_direction)
+        for b in range(batch_size):
+            # 提取单个样本
+            pred_sample = pred[b]  # (C, H, W)
+            target_sample = target[b]  # (C, H, W)
+            
+            # 对每个通道计算梯度
+            for c in range(pred_sample.shape[0]):
+                # 计算 Sobel 梯度
+                pred_grad_x = self.sobel_gradient_x(pred_sample[c:c+1].unsqueeze(0))
+                pred_grad_y = self.sobel_gradient_y(pred_sample[c:c+1].unsqueeze(0))
+                target_grad_x = self.sobel_gradient_x(target_sample[c:c+1].unsqueeze(0))
+                target_grad_y = self.sobel_gradient_y(target_sample[c:c+1].unsqueeze(0))
+                
+                # 计算梯度方向
+                pred_direction = torch.atan2(pred_grad_y + 1e-7, pred_grad_x + 1e-7)
+                target_direction = torch.atan2(target_grad_y + 1e-7, target_grad_x + 1e-7)
+                
+                # 计算梯度幅值
+                pred_magnitude = torch.sqrt(pred_grad_x**2 + pred_grad_y**2 + 1e-7)
+                target_magnitude = torch.sqrt(target_grad_x**2 + target_grad_y**2 + 1e-7)
+                
+                # 计算方向一致性损失
+                direction_diff = 1 - torch.cos(pred_direction - target_direction)
+                
+                # 使用梯度幅值作为权重
+                weights = torch.min(pred_magnitude, target_magnitude)
+                
+                # 累加加权的拓扑损失
+                total_loss += (direction_diff * weights).mean()
         
-        # Calculate gradient magnitude
-        pred_magnitude = torch.sqrt(pred_grad_x**2 + pred_grad_y**2)
-        target_magnitude = torch.sqrt(target_grad_x**2 + target_grad_y**2)
-        
-        # Use gradient magnitude as weight
-        weights = torch.min(pred_magnitude, target_magnitude)
-        
-        # Calculate weighted topology loss
-        topo_loss = (direction_diff * weights).mean()
-        
-        return topo_loss
+        return total_loss / (batch_size * pred.shape[1])
     
     def sobel_gradient_x(self, x):
         """Sobel gradient in X direction"""

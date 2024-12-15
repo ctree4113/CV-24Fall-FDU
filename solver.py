@@ -13,6 +13,8 @@ import sklearn
 import torchvision.utils as utils
 from sklearn.metrics import precision_score
 from skimage.io import imread, imsave
+from losses.improved_loss import ImprovedLoss
+from losses.connect_loss import ConnectLoss
 
 
 class Solver(object):
@@ -84,9 +86,18 @@ class Solver(object):
             device_name = self.args.dataset.split('retouch-')[1]
             pos_cnt = np.load(self.args.weights+device_name+'/training_positive_pixel_'+str(exp_id)+'.npy',allow_pickle=True)
             density, val_in_bin,bin_wide = self.get_density(pos_cnt)
-            self.loss_func=connect_loss(self.args,self.hori_translation,self.verti_translation, density,bin_wide)
+            self.loss_func = connect_loss(self.args, self.hori_translation, self.verti_translation, density, bin_wide)
         else:
-            self.loss_func=connect_loss(self.args,self.hori_translation,self.verti_translation)
+            base_criterion = connect_loss(self.args, self.hori_translation, self.verti_translation)
+            if hasattr(self.args, 'freq_weight') and hasattr(self.args, 'topo_weight') and \
+               (self.args.freq_weight > 0 or self.args.topo_weight > 0):
+                self.loss_func = ImprovedLoss(
+                    base_criterion=base_criterion,
+                    freq_weight=self.args.freq_weight,
+                    topo_weight=self.args.topo_weight
+                )
+            else:
+                self.loss_func = base_criterion
         net, optimizer = amp.initialize(model, optim, opt_level='O2')
         best_p = 0
         best_epo = 0

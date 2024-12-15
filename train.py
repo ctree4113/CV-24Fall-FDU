@@ -16,8 +16,6 @@ import torch.nn as nn
 import cv2
 from skimage.io import imread, imsave
 import os
-from losses.improved_loss import ImprovedLoss
-from losses.connect_loss import ConnectLoss
 
 def parse_args():
     parser = argparse.ArgumentParser(description='DconnNet Training With Pytorch')
@@ -62,7 +60,7 @@ def parse_args():
     parser.add_argument('--save', default='save',
                         help='Directory for saving checkpoint models')
 
-    parser.add_argument('--save-per-epochs', type=int, default=15,
+    parser.add_argument('--save-per-epochs', type=int, default=50,
                         help='per epochs to save')
 
                         
@@ -156,15 +154,6 @@ def main(args):
         if args.pretrained:
             model.load_state_dict(torch.load(args.pretrained,map_location = torch.device('cpu')))
             model = model.cuda()
-
-        # Create loss function
-        base_criterion = ConnectLoss()
-        if args.freq_weight > 0 or args.topo_weight > 0:
-            criterion = ImprovedLoss(base_criterion,
-                                   freq_weight=args.freq_weight,
-                                   topo_weight=args.topo_weight)
-        else:
-            criterion = base_criterion
 
         solver = Solver(args)
 
