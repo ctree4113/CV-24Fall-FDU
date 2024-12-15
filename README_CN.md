@@ -23,6 +23,7 @@
   $$F_{\text{concat}} = \text{Concat}(c_1, c_2, c_3, c_4).$$
 
   使用 $1 \times 1$ 卷积和 $3 \times 3$ 卷积提取全局和局部上下文信息，生成动态权重特征图：
+  
   $$F_{\text{attention}} = \text{Conv}_{1 \times 1}(\text{ReLU}(\text{Conv}_{3 \times 3}(F_{\text{concat}}))).$$
 
 2. **权重加权融合：**  
@@ -111,8 +112,11 @@ MRDE 模块的设计以多分辨率增强为核心，分为以下关键部分：
    - **通道注意力：** 通过全局平均池化和 MLP 生成通道权重 $\alpha_{\text{channel}}$：
      $$\alpha_{\text{channel}} = \sigma(\text{MLP}(\text{GAP}(X'))).$$
    - **空间注意力：** 通过 $7 \times 7$ 卷积生成空间权重 $\alpha_{\text{spatial}}$：
+
      $$\alpha_{\text{spatial}} = \sigma(\text{Conv}_{7 \times 7}(X')).$$
+  
    最终增强特征：
+
    $$X_{\text{MRDE}} = X' \cdot \alpha_{\text{channel}} \cdot \alpha_{\text{spatial}}.$$
 
 5. **归一化与残差连接：**  
@@ -133,6 +137,7 @@ MRDE 模块的设计以多分辨率增强为核心，分为以下关键部分：
     $$\mathcal{O}_{\text{SDE}} = 8 \cdot (C^2HW + CHW) \approx 8C^2HW.$$
   - **MRDE 模块：**  
     MRDE 的多分辨率处理复杂度为：
+    
     $$\mathcal{O}_{\text{MRDE}} = \sum_{s \in \{1, 2, 4\}} \left( C^2H^2/s^2 \right) \approx 1.75C^2HW.$$
 
 3. **梯度稳定性：**  
@@ -161,7 +166,9 @@ GLFI（Global-Local Feature Interaction）模块旨在通过多视角特征建�
 
 1. **多尺度全局特征提取**  
    为了捕获不同感受野下的全局上下文信息，GLFI 模块通过四个空洞卷积分支提取全局特征：
+
    $$F_{\text{global}} = \text{Concat}\left[\text{DilatedConv}_{r=1}, \text{DilatedConv}_{r=2}, \text{DilatedConv}_{r=4}, \text{DilatedConv}_{r=8}\right],$$
+   
    其中 $r$ 为空洞卷积的扩张率。每个分支的输出特征代表特定尺度的全局信息，并在通道维度上拼接以形成多尺度全局特征表示。
 
 2. **边缘检测增强**  
@@ -237,7 +244,8 @@ $$L = L_{\text{SD}} + L_{\text{Bicon}}.$$
 
 - 大小密度损失 $L_{\text{SDL}}$：
   SDL 针对医学数据的不平衡问题，引入基于标签大小分布的加权机制。首先，计算所有训练数据中每个类别的标签大小分布概率密度函数 $PDF_j(k)$，然后对每个样本的标签大小 $k$ 计算对应的加权系数 $P_j(k)$：
-  $P_j(k) = \begin{cases} 1, & k = 0 \\ -\log\left(PDF_j(k)\right), & k \neq 0. \end{cases}$$
+  
+  $$P_j(k) = \begin{cases} 1, & k = 0 \\ -\log\left(PDF_j(k)\right), & k \neq 0. \end{cases}$$
   
   最终的损失函数表示为：
   $$L_{\text{SD}} = \sum_j P_j(k) \left(1 - \frac{2 \sum (S \cdot G) + \epsilon}{\sum S + \sum G + \epsilon} \right),$$

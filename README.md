@@ -23,6 +23,7 @@ In the decoding phase, we dynamically weight and fuse feature maps from differen
    $$F_{\text{concat}} = \text{Concat}(c_1, c_2, c_3, c_4).$$
 
    Use $1 \times 1$ convolution and $3 \times 3$ convolution to extract global and local context information, generating dynamic weight feature maps:
+   
    $$F_{\text{attention}} = \text{Conv}_{1 \times 1}(\text{ReLU}(\text{Conv}_{3 \times 3}(F_{\text{concat}}))).$$
 
 2. **Weight-based Fusion:**  
@@ -111,8 +112,11 @@ The MRDE module design focuses on multi-resolution enhancement, divided into the
    - **Channel Attention:** Generate channel weights $\alpha_{\text{channel}}$ through global average pooling and MLP:
      $$\alpha_{\text{channel}} = \sigma(\text{MLP}(\text{GAP}(X'))).$$
    - **Spatial Attention:** Generate spatial weights $\alpha_{\text{spatial}}$ through $7 \times 7$ convolution:
+
      $$\alpha_{\text{spatial}} = \sigma(\text{Conv}_{7 \times 7}(X')).$$
+  
    Final enhanced feature:
+
    $$X_{\text{MRDE}} = X' \cdot \alpha_{\text{channel}} \cdot \alpha_{\text{spatial}}.$$
 
 5. **Normalization and Residual Connection:**  
@@ -133,6 +137,7 @@ The MRDE module design focuses on multi-resolution enhancement, divided into the
     $$\mathcal{O}_{\text{SDE}} = 8 \cdot (C^2HW + CHW) \approx 8C^2HW.$$
   - **MRDE Module:**  
     MRDE's multi-resolution processing complexity is:
+
     $$\mathcal{O}_{\text{MRDE}} = \sum_{s \in \{1, 2, 4\}} \left( C^2H^2/s^2 \right) \approx 1.75C^2HW.$$
 
 3. **Gradient Stability:**  
@@ -161,7 +166,9 @@ The GLFI (Global-Local Feature Interaction) module aims to enhance global and lo
 
 1. **Multi-scale Global Feature Extraction**  
    To capture global context information under different receptive fields, the GLFI module extracts global features through four dilated convolution branches:
+   
    $$F_{\text{global}} = \text{Concat}\left[\text{DilatedConv}_{r=1}, \text{DilatedConv}_{r=2}, \text{DilatedConv}_{r=4}, \text{DilatedConv}_{r=8}\right],$$
+   
    where $r$ is the dilation rate of dilated convolution. The output features from each branch represent global information at specific scales and are concatenated along the channel dimension to form multi-scale global feature representation.
 
 2. **Edge Detection Enhancement**  
@@ -237,8 +244,9 @@ $$L = L_{\text{SD}} + L_{\text{Bicon}}.$$
 
 - Size Density Loss $L_{\text{SDL}}$:
   SDL introduces a weighting mechanism based on label size distribution for medical data imbalance problem. First, calculate probability density function $PDF_j(k)$ of label size distribution for each class in all training data, then calculate corresponding weight coefficient $P_j(k)$ for label size $k$ of each sample:
-  $$P_j(k) = \begin{cases} 1, & k = 0 \\ -\log\left(PDF_j(k)\right), & k \neq 0. \end{cases}$$
   
+  $$P_j(k) = \begin{cases} 1, & k = 0 \\ -\log\left(PDF_j(k)\right), & k \neq 0. \end{cases}$$
+
   The final loss function is expressed as:
   $$L_{\text{SD}} = \sum_j P_j(k) \left(1 - \frac{2 \sum (S \cdot G) + \epsilon}{\sum S + \sum G + \epsilon} \right),$$
   where $S$ and $G$ represent predicted and target segmentation results respectively.
