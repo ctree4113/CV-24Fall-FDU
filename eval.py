@@ -70,6 +70,11 @@ def parse_args():
     parser.add_argument('--eval_topo', action='store_true',
                       help='Evaluate topology preservation metrics')
     
+    parser.add_argument('--use_mrde', action='store_true', default=False,
+                       help='Use MRDE module')
+    parser.add_argument('--use_glfi', action='store_true', default=False,
+                       help='Use GLFI module')
+    
     args = parser.parse_args()
 
     if not os.path.isdir(args.output_path):
@@ -288,7 +293,12 @@ def main(args):
         val_loader = torch.utils.data.DataLoader(dataset=validset, batch_size=1, shuffle=False, pin_memory=True, num_workers=6)
         print("Number of test data: %i" % len(val_loader))
 
-        model = DconnNet(num_class=args.num_class, decoder_attention=args.decoder_attention)
+        model = DconnNet(
+            num_class=args.num_class, 
+            decoder_attention=args.decoder_attention,
+            use_mrde=args.use_mrde,
+            use_glfi=args.use_glfi
+        )
         model.load_state_dict(torch.load(f'{args.ckpt_path}/{fold+1}/best_model.pth', map_location='cpu'))
         model = model.to(device)
         model.eval()
