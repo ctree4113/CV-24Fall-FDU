@@ -20,20 +20,14 @@ In the decoding phase, we dynamically weight and fuse feature maps from differen
 
 1. **Dynamic Feature Fusion:**  
    Concatenate features of different resolutions ($c_1, c_2, c_3, c_4$) from the decoder path to form joint features:
-   $$
-   F_{\text{concat}} = \text{Concat}(c_1, c_2, c_3, c_4).
-   $$
+   $$F_{\text{concat}} = \text{Concat}(c_1, c_2, c_3, c_4).$$
 
    Use $1 \times 1$ convolution and $3 \times 3$ convolution to extract global and local context information, generating dynamic weight feature maps:
-   $$
-   F_{\text{attention}} = \text{Conv}_{1 \times 1}(\text{ReLU}(\text{Conv}_{3 \times 3}(F_{\text{concat}}))).
-   $$
+   $$F_{\text{attention}} = \text{Conv}_{1 \times 1}(\text{ReLU}(\text{Conv}_{3 \times 3}(F_{\text{concat}}))).$$
 
 2. **Weight-based Fusion:**  
    Dynamic weighting mechanism fuses features from each layer to generate final decoder input:
-   $$
-   F_{\text{fused}} = \sum_{i=1}^4 \alpha_i \cdot c_i, \quad \alpha_i \text{ determined by } F_{\text{attention}}.
-   $$
+   $$F_{\text{fused}} = \sum_{i=1}^4 \alpha_i \cdot c_i, \quad \alpha_i \text{ determined by } F_{\text{attention}}.$$
 
 ---
 
@@ -65,31 +59,21 @@ The SDE module design includes three key parts: **Directional Prior Extraction**
 1. **Directional Prior Extraction**  
    SDE uses direction-embedded global feature $e_5$ to generate directional prior $\alpha_{\text{prior}}$. The specific process is:
    - $e_5$ is upsampled to input size, producing directional output $X_{\text{prior}}$:
-     $$
-     X_{\text{prior}} = \text{Conv}(\text{Upsample}(e_5)).
-     $$
+     $$X_{\text{prior}} = \text{Conv}(\text{Upsample}(e_5)).$$
    - Using Global Average Pooling (GAP) and $1 \times 1$ convolution layer to extract directional embedding $v_{\text{prior}}$:
-     $$
-     v_{\text{prior}} = \delta(W_1 \cdot \text{GAP}(X_{\text{prior}})),
-     $$
+     $$v_{\text{prior}} = \delta(W_1 \cdot \text{GAP}(X_{\text{prior}})),$$
      where $\delta$ is ReLU activation function.
    - Directional prior $\alpha_{\text{prior}}$ is normalized through a Sigmoid function:
-     $$
-     \alpha_{\text{prior}} = \sigma(W_2 \cdot v_{\text{prior}}).
-     $$
+     $$\alpha_{\text{prior}} = \sigma(W_2 \cdot v_{\text{prior}}).$$
 
 2. **Channel-wise Slicing**  
    $e_5$ and $\alpha_{\text{prior}}$ are sliced along channel dimension into $i$ groups of sub-channels $e_5^i$ and $\alpha_{\text{prior}}^i$, each group responsible for modeling features in different directions.
 
 3. **Sub-path Excitation (SPE)**  
    Each sub-channel group $e_5^i$ goes through dual attention modules (PAM and CAM) to extract contextual correlations and channel dependencies:
-   $$
-   e_5^{i'} = \text{PAM}(\text{CAM}(e_5^i)).
-   $$
+   $$e_5^{i'} = \text{PAM}(\text{CAM}(e_5^i)).$$
    Using directional prior $\alpha_{\text{prior}}^i$ for selective activation of features:
-   $$
-   e_{\text{SDE}}^i = W_3^i (\alpha_{\text{prior}}^i \cdot e_5^{i'}) + e_5^i.
-   $$
+   $$e_{\text{SDE}}^i = W_3^i (\alpha_{\text{prior}}^i \cdot e_5^{i'}) + e_5^i.$$
    Finally, outputs from each sub-path are stacked and re-encoded as new feature $e_{\text{SDE}}$.
 
 ---
@@ -113,41 +97,27 @@ The MRDE module design focuses on multi-resolution enhancement, divided into the
 
 1. **Multi-resolution Pyramid Feature Extraction:**  
    Input feature $X$ is downsampled to multiple resolutions $\{1, 2, 4\}$, generating features $X_s$ at different scales:
-   $$
-   X_s = \text{AdaptiveAvgPool}(X, (H/s, W/s)), \quad s \in \{1, 2, 4\}.
-   $$
+   $$X_s = \text{AdaptiveAvgPool}(X, (H/s, W/s)), \quad s \in \{1, 2, 4\}.$$
 
 2. **Directional Convolution Enhancement (Directional ConvBlock):**  
    Each scale feature $X_s$ is processed through directional convolution module to extract directional information:
-   $$
-   X_s' = \text{DepthwiseConv}(X_s) + \text{PointwiseConv}(X_s).
-   $$
+   $$X_s' = \text{DepthwiseConv}(X_s) + \text{PointwiseConv}(X_s).$$
 
 3. **Multi-resolution Feature Fusion:**  
    All scale directional enhanced features $\{X_1', X_2', X_4'\}$ are upsampled to uniform size and concatenated:
-   $$
-   X' = \text{Concat}([X_1', X_2', X_4'], \text{dim}=C).
-   $$
+   $$X' = \text{Concat}([X_1', X_2', X_4'], \text{dim}=C).$$
 
 4. **Attention Mechanism Optimization:**  
    - **Channel Attention:** Generate channel weights $\alpha_{\text{channel}}$ through global average pooling and MLP:
-     $$
-     \alpha_{\text{channel}} = \sigma(\text{MLP}(\text{GAP}(X'))).
-     $$
+     $$\alpha_{\text{channel}} = \sigma(\text{MLP}(\text{GAP}(X'))).$$
    - **Spatial Attention:** Generate spatial weights $\alpha_{\text{spatial}}$ through $7 \times 7$ convolution:
-     $$
-     \alpha_{\text{spatial}} = \sigma(\text{Conv}_{7 \times 7}(X')).
-     $$
+     $$\alpha_{\text{spatial}} = \sigma(\text{Conv}_{7 \times 7}(X')).$$
    Final enhanced feature:
-   $$
-   X_{\text{MRDE}} = X' \cdot \alpha_{\text{channel}} \cdot \alpha_{\text{spatial}}.
-   $$
+   $$X_{\text{MRDE}} = X' \cdot \alpha_{\text{channel}} \cdot \alpha_{\text{spatial}}.$$
 
 5. **Normalization and Residual Connection:**  
    Output features maintain stability through L2 normalization and residual path:
-   $$
-   X_{\text{output}} = \frac{X_{\text{MRDE}}}{\|X_{\text{MRDE}}\|_2 + \epsilon}.
-   $$
+   $$X_{\text{output}} = \frac{X_{\text{MRDE}}}{\|X_{\text{MRDE}}\|_2 + \epsilon}.$$
 
 ---
 
@@ -160,22 +130,16 @@ The MRDE module design focuses on multi-resolution enhancement, divided into the
 
   - **SDE Module:**  
     For input size $C \times H \times W$, SDE's complexity is:
-    $$
-    \mathcal{O}_{\text{SDE}} = 8 \cdot (C^2HW + CHW) \approx 8C^2HW.
-    $$
+    $$\mathcal{O}_{\text{SDE}} = 8 \cdot (C^2HW + CHW) \approx 8C^2HW.$$
   - **MRDE Module:**  
     MRDE's multi-resolution processing complexity is:
-    $$
-    \mathcal{O}_{\text{MRDE}} = \sum_{s \in \{1, 2, 4\}} \left( C^2H^2/s^2 \right) \approx 1.75C^2HW.
-    $$
+    $$\mathcal{O}_{\text{MRDE}} = \sum_{s \in \{1, 2, 4\}} \left( C^2H^2/s^2 \right) \approx 1.75C^2HW.$$
 
 3. **Gradient Stability:**  
    MRDE calculates directional features independently at each scale, reducing gradient propagation paths, combined with input-output normalization to avoid gradient explosion.
   - **SDE Module:**  
     Independent gradient calculation between sub-paths leads to higher instability:
-    $$
-    \nabla L_{e_5^i} = \nabla L_{\text{concat}} \cdot \frac{\partial \text{PAM}(\text{CAM}(e_5^i))}{\partial e_5^i}.
-    $$
+    $$\nabla L_{e_5^i} = \nabla L_{\text{concat}} \cdot \frac{\partial \text{PAM}(\text{CAM}(e_5^i))}{\partial e_5^i}.$$
   - **MRDE Module:**  
     MRDE's normalization and directional convolution reduce gradient fluctuation.
 
@@ -197,45 +161,31 @@ The GLFI (Global-Local Feature Interaction) module aims to enhance global and lo
 
 1. **Multi-scale Global Feature Extraction**  
    To capture global context information under different receptive fields, the GLFI module extracts global features through four dilated convolution branches:
-   $$
-   F_{\text{global}} = \text{Concat}\left[\text{DilatedConv}_{r=1}, \text{DilatedConv}_{r=2}, \text{DilatedConv}_{r=4}, \text{DilatedConv}_{r=8}\right],
-   $$
+   $$F_{\text{global}} = \text{Concat}\left[\text{DilatedConv}_{r=1}, \text{DilatedConv}_{r=2}, \text{DilatedConv}_{r=4}, \text{DilatedConv}_{r=8}\right],$$
    where $r$ is the dilation rate of dilated convolution. The output features from each branch represent global information at specific scales and are concatenated along the channel dimension to form multi-scale global feature representation.
 
 2. **Edge Detection Enhancement**  
    Use enhanced Sobel operator to extract edge features and refine these edge information through learnable convolution module:
-   $$
-   F_{\text{edge}} = \text{Refine}(\text{Sobel}_x(F) \oplus \text{Sobel}_y(F)),
-   $$
+   $$F_{\text{edge}} = \text{Refine}(\text{Sobel}_x(F) \oplus \text{Sobel}_y(F)),$$
    where $\text{Sobel}_x$ and $\text{Sobel}_y$ are Sobel filters in X and Y directions respectively, $\oplus$ represents feature concatenation, $\text{Refine}$ is the convolution network for refining edge features. Through this way, GLFI can enhance the model's perception of boundaries and local details.
 
 3. **Graph Attention Feature Refinement**  
    In the interaction process between global and local features, use multi-head graph attention mechanism to model global relationships between features. Specific steps include:
    - Linear transformation generates query ($Q$), key ($K$), value ($V$):
-     $$
-     Q = W_q F, \quad K = W_k F, \quad V = W_v F,
-     $$
+     $$Q = W_q F, \quad K = W_k F, \quad V = W_v F,$$
      where $W_q, W_k, W_v$ are linear transformation matrices.
    - Calculate attention weights:
-     $$
-     A = \text{Softmax}\left(\frac{Q \cdot K^\top}{\sqrt{d_k}}\right),
-     $$
+     $$A = \text{Softmax}\left(\frac{Q \cdot K^\top}{\sqrt{d_k}}\right),$$
      where $d_k$ is scaling factor used to stabilize gradients.
    - Generate attention features based on attention weights and feature values $V$:
-     $$
-     F_{\text{attn}} = A \cdot V.
-     $$
+     $$F_{\text{attn}} = A \cdot V.$$
    - Project output:
-     $$
-     F_{\text{out}} = W_o F_{\text{attn}},
-     $$
+     $$F_{\text{out}} = W_o F_{\text{attn}},$$
      where $W_o$ is output projection matrix.
 
 4. **Feature Fusion and Optimization**  
    Fuse global features $F_{\text{global}}$, edge features $F_{\text{edge}}$ and graph attention features $F_{\text{attn}}$, optimize feature interaction through channel and spatial attention:
-   $$
-   F_{\text{fusion}} = \alpha_{\text{channel}} \cdot F_{\text{global}} + \alpha_{\text{spatial}} \cdot F_{\text{attn}},
-   $$
+   $$F_{\text{fusion}} = \alpha_{\text{channel}} \cdot F_{\text{global}} + \alpha_{\text{spatial}} \cdot F_{\text{attn}},$$
    where $\alpha_{\text{channel}}, \alpha_{\text{spatial}}$ are attention weights generated through global average pooling and convolution respectively, ensuring effectiveness of feature fusion.
 
 ---
@@ -281,34 +231,24 @@ The improved loss function enhances model robustness to imbalanced data and sign
 ##### 1.1 Analysis of Original Loss Function Structure
 
 The original total loss function is defined as:
-$$
-L_{\text{total}} = L_{\text{main}} + 0.3 \cdot L_{\text{prior}},
-$$
+$$L_{\text{total}} = L_{\text{main}} + 0.3 \cdot L_{\text{prior}},$$
 where $L_{\text{main}}$ and $L_{\text{prior}}$ correspond to model's main output and auxiliary output from SDE module respectively. These two parts each consist of Size Density Loss (SDL) and Bidirectional Connectivity Loss (Bicon Loss):
-$$
-L = L_{\text{SD}} + L_{\text{Bicon}}.
-$$
+$$L = L_{\text{SD}} + L_{\text{Bicon}}.$$
 
 - Size Density Loss $L_{\text{SDL}}$:
   SDL introduces a weighting mechanism based on label size distribution for medical data imbalance problem. First, calculate probability density function $PDF_j(k)$ of label size distribution for each class in all training data, then calculate corresponding weight coefficient $P_j(k)$ for label size $k$ of each sample:
-  $$
-  P_j(k) =
+  $$P_j(k) =
   \begin{cases}
   1, & k = 0 \\
   -\log\left(PDF_j(k)\right), & k \neq 0.
-  \end{cases}
-  $$
+  \end{cases}$$
   The final loss function is expressed as:
-  $$
-  L_{\text{SD}} = \sum_j P_j(k) \left(1 - \frac{2 \sum (S \cdot G) + \epsilon}{\sum S + \sum G + \epsilon} \right),
-  $$
+  $$L_{\text{SD}} = \sum_j P_j(k) \left(1 - \frac{2 \sum (S \cdot G) + \epsilon}{\sum S + \sum G + \epsilon} \right),$$
   where $S$ and $G$ represent predicted and target segmentation results respectively.
 
 - Bidirectional Connectivity Loss $L_{\text{Bicon}}$:
   $L_{\text{Bicon}}$ includes two parts, directional alignment loss and connectivity matching loss, used to model connectivity between pixels.
-  $$
-  L_{\text{Bicon}} = L_{\text{decouple}} + L_{\text{con\_const}}.
-  $$
+  $$L_{\text{Bicon}} = L_{\text{decouple}} + L_{\text{con\_const}}.$$
 
 ##### 1.2 Limitations
 1. **Insufficient for Low-frequency Structures**:
@@ -325,9 +265,7 @@ Original loss function doesn't consider multi-scale feature extraction and frequ
 ##### 2.1 Improvement Design
 
 The improved loss function includes three main parts: connectivity loss, multi-scale frequency domain loss, and topology preservation loss. Total loss function is defined as:
-$$
-L_{\text{total}} = w_c L_{\text{connect}} + w_f L_{\text{freq}} + w_t L_{\text{topo}},
-$$
+$$L_{\text{total}} = w_c L_{\text{connect}} + w_f L_{\text{freq}} + w_t L_{\text{topo}},$$
 where $w_c, w_f, w_t$ are weight coefficients controlling contribution of different loss terms.
 
 - Connectivity Loss $L_{\text{connect}}$:
@@ -335,23 +273,17 @@ where $w_c, w_f, w_t$ are weight coefficients controlling contribution of differ
 
 - Multi-scale Frequency Domain Loss $L_{\text{freq}}$:
   Convert predicted values and target values to frequency domain through Fast Fourier Transform (FFT) and calculate Mean Square Error (MSE) of logarithmic magnitude spectrum:
-  $$
-  L_{\text{freq}} = \frac{1}{3} \sum_{s \in {1, 2, 4}} \text{MSE} \left(\log(|FFT_s(P)|), \log(|FFT_s(T)|)\right),
-  $$
+  $$L_{\text{freq}} = \frac{1}{3} \sum_{s \in {1, 2, 4}} \text{MSE} \left(\log(|FFT_s(P)|), \log(|FFT_s(T)|)\right),$$
   where $P$ and $T$ represent predicted and target values respectively, $s$ represents downsampling factor under multi-scale.
 
 - Topology Preservation Loss $L_{\text{topo}}$:
 Use directional gradient consistency and edge enhancement strategy to model topological structure:
   - Gradient Direction Consistency:
-    $$
-    L_{\text{dir}} = \left(1 - \cos(\theta_P - \theta_T)\right) \cdot W_{\text{edge}},
-    $$
+    $$L_{\text{dir}} = \left(1 - \cos(\theta_P - \theta_T)\right) \cdot W_{\text{edge}},$$
     where $\theta$ represents gradient direction, $W_{\text{edge}}$ is edge weighting.
 
   - Edge Enhancement Loss:
-    $$
-    L_{\text{edge}} = \text{MAE}(M_P \cdot M_T, M_T^2),
-    $$
+    $$L_{\text{edge}} = \text{MAE}(M_P \cdot M_T, M_T^2),$$
     where $M$ is gradient magnitude.
 
 2.2 Analysis of Improvements

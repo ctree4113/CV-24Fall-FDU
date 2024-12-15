@@ -20,20 +20,14 @@
 
 1. **动态特征融合：**  
   将解码路径中不同分辨率的特征图（$c_1, c_2, c_3, c_4$）通过拼接形成联合特征：
-  $$
-  F_{\text{concat}} = \text{Concat}(c_1, c_2, c_3, c_4).
-  $$
+  $$F_{\text{concat}} = \text{Concat}(c_1, c_2, c_3, c_4).$$
 
   使用 $1 \times 1$ 卷积和 $3 \times 3$ 卷积提取全局和局部上下文信息，生成动态权重特征图：
-  $$
-  F_{\text{attention}} = \text{Conv}_{1 \times 1}(\text{ReLU}(\text{Conv}_{3 \times 3}(F_{\text{concat}}))).
-  $$
+  $$F_{\text{attention}} = \text{Conv}_{1 \times 1}(\text{ReLU}(\text{Conv}_{3 \times 3}(F_{\text{concat}}))).$$
 
 2. **权重加权融合：**  
   动态加权机制将各层特征进行加权融合，生成最终解码输入：
-  $$
-  F_{\text{fused}} = \sum_{i=1}^4 \alpha_i \cdot c_i, \quad \alpha_i \text{由} F_{\text{attention}} \text{确定}.
-  $$
+  $$F_{\text{fused}} = \sum_{i=1}^4 \alpha_i \cdot c_i, \quad \alpha_i \text{由} F_{\text{attention}} \text{确定}.$$
 
 ---
 
@@ -65,31 +59,21 @@ SDE 模块的设计包括三个关键部分：**方向先验提取**、**通道�
 1. **方向先验提取 (Directional Prior Extraction)**  
    SDE 利用方向信息嵌入的全局特征 $e_5$ 生成方向先验 $\alpha_{\text{prior}}$。具体过程为：
    - $e_5$ 被上采样到输入尺寸，产生方向性输出 $X_{\text{prior}}$：
-     $$
-     X_{\text{prior}} = \text{Conv}(\text{Upsample}(e_5)).
-     $$
+     $$X_{\text{prior}} = \text{Conv}(\text{Upsample}(e_5)).$$
    - 使用全局平均池化 (GAP) 和 $1 \times 1$ 卷积层提取方向嵌入 $v_{\text{prior}}$：
-     $$
-     v_{\text{prior}} = \delta(W_1 \cdot \text{GAP}(X_{\text{prior}})),
-     $$
+     $$v_{\text{prior}} = \delta(W_1 \cdot \text{GAP}(X_{\text{prior}})),$$
      其中 $\delta$ 是 ReLU 激活函数。
    - 方向先验 $\alpha_{\text{prior}}$ 通过一个 Sigmoid 函数归一化：
-     $$
-     \alpha_{\text{prior}} = \sigma(W_2 \cdot v_{\text{prior}}).
-     $$
+     $$\alpha_{\text{prior}} = \sigma(W_2 \cdot v_{\text{prior}}).$$
 
 2. **通道分割 (Channel-wise Slicing)**  
    $e_5$ 和 $\alpha_{\text{prior}}$ 被沿通道维度切分为 $i$ 组子通道 $e_5^i$ 和 $\alpha_{\text{prior}}^i$，每组负责建模不同方向的特征。
 
 3. **子路径激励 (Sub-path Excitation, SPE)**  
    每组子通道 $e_5^i$ 通过双重注意力模块 (PAM 和 CAM) 提取上下文相关性和通道间依赖性：
-   $$
-   e_5^{i'} = \text{PAM}(\text{CAM}(e_5^i)).
-   $$
+   $$e_5^{i'} = \text{PAM}(\text{CAM}(e_5^i)).$$
    使用方向先验 $\alpha_{\text{prior}}^i$ 对特征进行选择性激活：
-   $$
-   e_{\text{SDE}}^i = W_3^i (\alpha_{\text{prior}}^i \cdot e_5^{i'}) + e_5^i.
-   $$
+   $$e_{\text{SDE}}^i = W_3^i (\alpha_{\text{prior}}^i \cdot e_5^{i'}) + e_5^i.$$
    最后，各子路径的输出堆叠并重编码为新特征 $e_{\text{SDE}}$。
 
 ---
@@ -113,41 +97,27 @@ MRDE 模块的设计以多分辨率增强为核心，分为以下关键部分：
 
 1. **多分辨率金字塔特征提取：**  
    输入特征 $X$ 被下采样至多种分辨率 $\{1, 2, 4\}$，生成不同尺度的特征 $X_s$：
-   $$
-   X_s = \text{AdaptiveAvgPool}(X, (H/s, W/s)), \quad s \in \{1, 2, 4\}.
-   $$
+   $$X_s = \text{AdaptiveAvgPool}(X, (H/s, W/s)), \quad s \in \{1, 2, 4\}.$$
 
 2. **方向卷积增强 (Directional ConvBlock)：**  
    每个尺度特征 $X_s$ 通过方向卷积模块处理，提取方向信息：
-   $$
-   X_s' = \text{DepthwiseConv}(X_s) + \text{PointwiseConv}(X_s).
-   $$
+   $$X_s' = \text{DepthwiseConv}(X_s) + \text{PointwiseConv}(X_s).$$
 
 3. **多分辨率特征融合：**  
    所有尺度的方向增强特征 $\{X_1', X_2', X_4'\}$ 被上采样至统一尺寸并拼接：
-   $$
-   X' = \text{Concat}([X_1', X_2', X_4'], \text{dim}=C).
-   $$
+   $$X' = \text{Concat}([X_1', X_2', X_4'], \text{dim}=C).$$
 
 4. **注意力机制优化：**  
    - **通道注意力：** 通过全局平均池化和 MLP 生成通道权重 $\alpha_{\text{channel}}$：
-     $$
-     \alpha_{\text{channel}} = \sigma(\text{MLP}(\text{GAP}(X'))).
-     $$
+     $$\alpha_{\text{channel}} = \sigma(\text{MLP}(\text{GAP}(X'))).$$
    - **空间注意力：** 通过 $7 \times 7$ 卷积生成空间权重 $\alpha_{\text{spatial}}$：
-     $$
-     \alpha_{\text{spatial}} = \sigma(\text{Conv}_{7 \times 7}(X')).
-     $$
+     $$\alpha_{\text{spatial}} = \sigma(\text{Conv}_{7 \times 7}(X')).$$
    最终增强特征：
-   $$
-   X_{\text{MRDE}} = X' \cdot \alpha_{\text{channel}} \cdot \alpha_{\text{spatial}}.
-   $$
+   $$X_{\text{MRDE}} = X' \cdot \alpha_{\text{channel}} \cdot \alpha_{\text{spatial}}.$$
 
 5. **归一化与残差连接：**  
    输出特征通过 L2 归一化和残差路径保持稳定：
-   $$
-   X_{\text{output}} = \frac{X_{\text{MRDE}}}{\|X_{\text{MRDE}}\|_2 + \epsilon}.
-   $$
+   $$X_{\text{output}} = \frac{X_{\text{MRDE}}}{\|X_{\text{MRDE}}\|_2 + \epsilon}.$$
 
 ---
 
@@ -160,22 +130,16 @@ MRDE 模块的设计以多分辨率增强为核心，分为以下关键部分：
 
   - **SDE 模块：**  
     输入大小为 $C \times H \times W$，SDE 的复杂度为：
-    $$
-    \mathcal{O}_{\text{SDE}} = 8 \cdot (C^2HW + CHW) \approx 8C^2HW.
-    $$
+    $$\mathcal{O}_{\text{SDE}} = 8 \cdot (C^2HW + CHW) \approx 8C^2HW.$$
   - **MRDE 模块：**  
     MRDE 的多分辨率处理复杂度为：
-    $$
-    \mathcal{O}_{\text{MRDE}} = \sum_{s \in \{1, 2, 4\}} \left( C^2H^2/s^2 \right) \approx 1.75C^2HW.
-    $$
+    $$\mathcal{O}_{\text{MRDE}} = \sum_{s \in \{1, 2, 4\}} \left( C^2H^2/s^2 \right) \approx 1.75C^2HW.$$
 
 3. **梯度稳定性：**  
    MRDE 在每个尺度中独立计算方向特征，减少了梯度传递路径，结合输入输出归一化避免梯度爆炸。
   - **SDE 模块：**  
     子路径间梯度独立计算导致较高的不稳定性：
-    $$
-    \nabla L_{e_5^i} = \nabla L_{\text{concat}} \cdot \frac{\partial \text{PAM}(\text{CAM}(e_5^i))}{\partial e_5^i}.
-    $$
+    $$\nabla L_{e_5^i} = \nabla L_{\text{concat}} \cdot \frac{\partial \text{PAM}(\text{CAM}(e_5^i))}{\partial e_5^i}.$$
   - **MRDE 模块：**  
     MRDE 的归一化和方向卷积减少了梯度波动。
 
@@ -197,45 +161,31 @@ GLFI（Global-Local Feature Interaction）模块旨在通过多视角特征建�
 
 1. **多尺度全局特征提取**  
    为了捕获不同感受野下的全局上下文信息，GLFI 模块通过四个空洞卷积分支提取全局特征：
-   $$
-   F_{\text{global}} = \text{Concat}\left[\text{DilatedConv}_{r=1}, \text{DilatedConv}_{r=2}, \text{DilatedConv}_{r=4}, \text{DilatedConv}_{r=8}\right],
-   $$
+   $$F_{\text{global}} = \text{Concat}\left[\text{DilatedConv}_{r=1}, \text{DilatedConv}_{r=2}, \text{DilatedConv}_{r=4}, \text{DilatedConv}_{r=8}\right],$$
    其中 $r$ 为空洞卷积的扩张率。每个分支的输出特征代表特定尺度的全局信息，并在通道维度上拼接以形成多尺度全局特征表示。
 
 2. **边缘检测增强**  
    使用增强的 Sobel 算子提取边缘特征，并通过可学习卷积模块细化这些边缘信息：
-   $$
-   F_{\text{edge}} = \text{Refine}(\text{Sobel}_x(F) \oplus \text{Sobel}_y(F)),
-   $$
+   $$F_{\text{edge}} = \text{Refine}(\text{Sobel}_x(F) \oplus \text{Sobel}_y(F)),$$
    其中 $\text{Sobel}_x$ 和 $\text{Sobel}_y$ 分别为 X 和 Y 方向的 Sobel 滤波，$\oplus$ 表示特征拼接，$\text{Refine}$ 为用于细化边缘特征的卷积网络。通过这种方式，GLFI 能够增强模型对边界和局部细节的感知能力。
 
 3. **图注意力特征细化**  
    在全局与局部特征的交互过程中，使用多头图注意力机制建模特征间的全局关系。具体步骤包括：
    - 线性变换生成查询 ($Q$)、键 ($K$)、值 ($V$)：
-     $$
-     Q = W_q F, \quad K = W_k F, \quad V = W_v F,
-     $$
+     $$Q = W_q F, \quad K = W_k F, \quad V = W_v F,$$
      其中 $W_q, W_k, W_v$ 分别为线性变换矩阵。
    - 计算注意力权重：
-     $$
-     A = \text{Softmax}\left(\frac{Q \cdot K^\top}{\sqrt{d_k}}\right),
-     $$
+     $$A = \text{Softmax}\left(\frac{Q \cdot K^\top}{\sqrt{d_k}}\right),$$
      其中 $d_k$ 是缩放因子，用于稳定梯度。
    - 基于注意力权重和特征值 $V$ 生成注意力特征：
-     $$
-     F_{\text{attn}} = A \cdot V.
-     $$
+     $$F_{\text{attn}} = A \cdot V.$$
    - 投影输出：
-     $$
-     F_{\text{out}} = W_o F_{\text{attn}},
-     $$
+     $$F_{\text{out}} = W_o F_{\text{attn}},$$
      其中 $W_o$ 为输出投影矩阵。
 
 4. **特征融合与优化**  
    将全局特征 $F_{\text{global}}$、边缘特征 $F_{\text{edge}}$ 和图注意力特征 $F_{\text{attn}}$ 进行融合，通过通道和空间注意力优化特征交互：
-   $$
-   F_{\text{fusion}} = \alpha_{\text{channel}} \cdot F_{\text{global}} + \alpha_{\text{spatial}} \cdot F_{\text{attn}},
-   $$
+   $$F_{\text{fusion}} = \alpha_{\text{channel}} \cdot F_{\text{global}} + \alpha_{\text{spatial}} \cdot F_{\text{attn}},$$
    其中 $\alpha_{\text{channel}}, \alpha_{\text{spatial}}$ 分别通过全局平均池化和卷积生成的注意力权重，确保特征融合的有效性。
 
 ---
@@ -281,34 +231,24 @@ GLFI 模块通过整合全局与局部特征的交互设计，为医学图像分
 ##### 1.1 原有损失函数结构分析
 
 原总损失函数的定义如下：
-$$
-L_{\text{total}} = L_{\text{main}} + 0.3 \cdot L_{\text{prior}},
-$$
+$$L_{\text{total}} = L_{\text{main}} + 0.3 \cdot L_{\text{prior}},$$
 其中 $L_{\text{main}}$ 和 $L_{\text{prior}}$ 分别对应模型的主输出和来自 SDE 模块的辅助输出。这两个部分分别由大小密度损失（Size Density Loss, SDL）和双向连通性损失（Bicon Loss）组成：
-$$
-L = L_{\text{SD}} + L_{\text{Bicon}}.
-$$
+$$L = L_{\text{SD}} + L_{\text{Bicon}}.$$
 
 - 大小密度损失 $L_{\text{SDL}}$：
   SDL 针对医学数据的不平衡问题，引入基于标签大小分布的加权机制。首先，计算所有训练数据中每个类别的标签大小分布概率密度函数 $PDF_j(k)$，然后对每个样本的标签大小 $k$ 计算对应的加权系数 $P_j(k)$：
-  $$
-  P_j(k) =
+  $$P_j(k) =
   \begin{cases}
   1, & k = 0 \\
   -\log\left(PDF_j(k)\right), & k \neq 0.
-  \end{cases}
-  $$
+  \end{cases}$$
   最终的损失函数表示为：
-  $$
-  L_{\text{SD}} = \sum_j P_j(k) \left(1 - \frac{2 \sum (S \cdot G) + \epsilon}{\sum S + \sum G + \epsilon} \right),
-  $$
+  $$L_{\text{SD}} = \sum_j P_j(k) \left(1 - \frac{2 \sum (S \cdot G) + \epsilon}{\sum S + \sum G + \epsilon} \right),$$
   其中 $S$ 和 $G$ 分别表示预测和目标分割结果。
 
 - 双向连通性损失 $L_{\text{Bicon}}$：
   $L_{\text{Bicon}}$ 包括两部分，分别为方向对齐损失和连通性匹配损失，用于建模像素间的连通关系。
-  $$
-  L_{\text{Bicon}} = L_{\text{decouple}} + L_{\text{con\_const}}.
-  $$
+  $$L_{\text{Bicon}} = L_{\text{decouple}} + L_{\text{con\_const}}.$$
 
 ##### 1.2 存在的不足
 1. **对低频结构的不足**：
@@ -325,9 +265,7 @@ $L_{\text{SDL}}$ 的标签加权策略主要基于像素分布，未能直接建
 ##### 2.1 改进设计
 
 改进的损失函数包括三个主要部分：连通性损失、多尺度频域损失和拓扑保留损失。总损失函数定义为：
-$$
-L_{\text{total}} = w_c L_{\text{connect}} + w_f L_{\text{freq}} + w_t L_{\text{topo}},
-$$
+$$L_{\text{total}} = w_c L_{\text{connect}} + w_f L_{\text{freq}} + w_t L_{\text{topo}},$$
 其中 $w_c, w_f, w_t$ 分别是权重系数，控制不同损失项的贡献。
 
 - 连通性损失 $L_{\text{connect}}$：
@@ -335,23 +273,17 @@ $$
 
 - 多尺度频域损失 $L_{\text{freq}}$：
   通过快速傅里叶变换 (FFT) 将预测值和目标值转换到频域，并计算对数幅度谱的均方误差 (MSE)：
-  $$
-  L_{\text{freq}} = \frac{1}{3} \sum_{s \in {1, 2, 4}} \text{MSE} \left(\log(|FFT_s(P)|), \log(|FFT_s(T)|)\right),
-  $$
+  $$L_{\text{freq}} = \frac{1}{3} \sum_{s \in {1, 2, 4}} \text{MSE} \left(\log(|FFT_s(P)|), \log(|FFT_s(T)|)\right),$$
   其中 $P$ 和 $T$ 分别表示预测值和目标值，$s$ 表示多尺度下的降采样因子。
 
 - 拓扑保留损失 $L_{\text{topo}}$：
 使用方向梯度的一致性和边缘增强策略建模拓扑结构：
   - 梯度方向一致性：
-    $$
-    L_{\text{dir}} = \left(1 - \cos(\theta_P - \theta_T)\right) \cdot W_{\text{edge}},
-    $$
+    $$L_{\text{dir}} = \left(1 - \cos(\theta_P - \theta_T)\right) \cdot W_{\text{edge}},$$
     其中 $\theta$ 表示梯度方向，$W_{\text{edge}}$ 为边缘加权。
 
   - 边缘增强损失：
-    $$
-    L_{\text{edge}} = \text{MAE}(M_P \cdot M_T, M_T^2),
-    $$
+    $$L_{\text{edge}} = \text{MAE}(M_P \cdot M_T, M_T^2),$$
     其中 $M$ 为梯度幅值。
 
 2.2 改进点分析
