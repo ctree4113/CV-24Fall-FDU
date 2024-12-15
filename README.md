@@ -237,18 +237,14 @@ $$L = L_{\text{SD}} + L_{\text{Bicon}}.$$
 
 - Size Density Loss $L_{\text{SDL}}$:
   SDL introduces a weighting mechanism based on label size distribution for medical data imbalance problem. First, calculate probability density function $PDF_j(k)$ of label size distribution for each class in all training data, then calculate corresponding weight coefficient $P_j(k)$ for label size $k$ of each sample:
-  $$P_j(k) =
-  \begin{cases}
-  1, & k = 0 \\
-  -\log\left(PDF_j(k)\right), & k \neq 0.
-  \end{cases}$$
+  $$P_j(k) = \begin{cases} 1, & k = 0 \\ -\log\left(PDF_j(k)\right), & k \neq 0. \end{cases}$$
+  
   The final loss function is expressed as:
   $$L_{\text{SD}} = \sum_j P_j(k) \left(1 - \frac{2 \sum (S \cdot G) + \epsilon}{\sum S + \sum G + \epsilon} \right),$$
   where $S$ and $G$ represent predicted and target segmentation results respectively.
 
 - Bidirectional Connectivity Loss $L_{\text{Bicon}}$:
   $L_{\text{Bicon}}$ includes two parts, directional alignment loss and connectivity matching loss, used to model connectivity between pixels.
-  $$L_{\text{Bicon}} = L_{\text{decouple}} + L_{\text{con\_const}}.$$
 
 ##### 1.2 Limitations
 1. **Insufficient for Low-frequency Structures**:

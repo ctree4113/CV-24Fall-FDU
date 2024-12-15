@@ -237,18 +237,14 @@ $$L = L_{\text{SD}} + L_{\text{Bicon}}.$$
 
 - 大小密度损失 $L_{\text{SDL}}$：
   SDL 针对医学数据的不平衡问题，引入基于标签大小分布的加权机制。首先，计算所有训练数据中每个类别的标签大小分布概率密度函数 $PDF_j(k)$，然后对每个样本的标签大小 $k$ 计算对应的加权系数 $P_j(k)$：
-  $$P_j(k) =
-  \begin{cases}
-  1, & k = 0 \\
-  -\log\left(PDF_j(k)\right), & k \neq 0.
-  \end{cases}$$
+  $P_j(k) = \begin{cases} 1, & k = 0 \\ -\log\left(PDF_j(k)\right), & k \neq 0. \end{cases}$$
+  
   最终的损失函数表示为：
   $$L_{\text{SD}} = \sum_j P_j(k) \left(1 - \frac{2 \sum (S \cdot G) + \epsilon}{\sum S + \sum G + \epsilon} \right),$$
   其中 $S$ 和 $G$ 分别表示预测和目标分割结果。
 
 - 双向连通性损失 $L_{\text{Bicon}}$：
   $L_{\text{Bicon}}$ 包括两部分，分别为方向对齐损失和连通性匹配损失，用于建模像素间的连通关系。
-  $$L_{\text{Bicon}} = L_{\text{decouple}} + L_{\text{con\_const}}.$$
 
 ##### 1.2 存在的不足
 1. **对低频结构的不足**：
